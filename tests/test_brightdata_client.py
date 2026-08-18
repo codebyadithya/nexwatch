@@ -144,5 +144,26 @@ class BrightDataClientTests(unittest.TestCase):
                 )
 
 
+
+    @patch("src.nexwatch.brightdata_client.subprocess.run")
+    def test_list_response_is_supported(self, mock_run):
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = '[{"stories": []}]'
+        mock_run.return_value.stderr = ""
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "run.json"
+
+            result = run_scraper(
+                collector_id="c_test",
+                url="https://news.ycombinator.com",
+                output_path=output_path,
+            )
+
+            self.assertIsInstance(result, list)
+            self.assertEqual(result, [{"stories": []}])
+
 if __name__ == "__main__":
     unittest.main()
+
+

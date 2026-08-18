@@ -1,27 +1,33 @@
 ﻿import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 
 class BrightDataError(RuntimeError):
     """Raised when a Bright Data CLI operation fails."""
 
 
-def _run_command(command: list[str]) -> dict:
+def _run_command(command: list[str]) -> Any:
     result = subprocess.run(
         command,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
 
     if result.returncode != 0:
-        message = result.stderr.strip() or result.stdout.strip()
+        stdout = result.stdout or ""
+        stderr = result.stderr or ""
+        message = stderr.strip() or stdout.strip()
+
         raise BrightDataError(
             f"Bright Data command failed ({result.returncode}): {message}"
         )
 
-    output = result.stdout.strip()
+    output = (result.stdout or "").strip()
 
     if not output:
         return {}
@@ -38,7 +44,7 @@ def run_scraper(
     collector_id: str,
     url: str,
     output_path: Path,
-) -> dict:
+) -> Any:
     command = [
         "brightdata.cmd",
         "scraper",
@@ -50,8 +56,10 @@ def run_scraper(
 
     result = _run_command(command)
 
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
     output_path.write_text(
-        json.dumps(result, indent=2) + "\n",
+        json.dumps(result, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
 
@@ -63,7 +71,7 @@ def heal_scraper(
     prompt: str,
     url: str,
     output_path: Path,
-) -> dict:
+) -> Any:
     if len(prompt) > 1000:
         raise ValueError("Healing prompt must be 1000 characters or fewer.")
 
@@ -80,8 +88,10 @@ def heal_scraper(
 
     result = _run_command(command)
 
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
     output_path.write_text(
-        json.dumps(result, indent=2) + "\n",
+        json.dumps(result, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
 
@@ -92,7 +102,7 @@ def approve_heal(
     collector_id: str,
     url: str,
     output_path: Path,
-) -> dict:
+) -> Any:
     command = [
         "brightdata.cmd",
         "scraper",
@@ -105,8 +115,10 @@ def approve_heal(
 
     result = _run_command(command)
 
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
     output_path.write_text(
-        json.dumps(result, indent=2) + "\n",
+        json.dumps(result, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
 
