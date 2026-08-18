@@ -1,0 +1,148 @@
+[
+  {
+    "stories": [
+      {
+        "title": "How Bluesky draws its logo on screenshots",
+        "url": "not-a-valid-url",
+        "points": 382,
+        "author": "gavide",
+        "comment_count": 253
+      },
+      {
+        "title": "GPT-5.6 Sol Pricing Cut by 50%",
+        "url": "https://openrouter.ai/openai/gpt-5.6-sol",
+        "points": 309,
+        "author": "Topfi"
+      },
+      {
+        "title": "Quake Shareware, a CD-ROM just a little too full",
+        "url": "https://fabiensanglard.net/quake_shareware_cd/index.html",
+        "points": 256,
+        "author": "shdon",
+        "comment_count": 111
+      },
+      {
+        "title": "Shattered skeleton is first confirmed death from trebuchet",
+        "url": "https://www.science.org/content/article/shattered-skeleton-scottish-castle-first-confirmed-death-trebuchet",
+        "points": 41,
+        "author": "hermitcrab",
+        "comment_count": 26
+      },
+      {
+        "title": "The Benchmarkpocalypse",
+        "url": "https://danluu.com/benchpocalypse/",
+        "points": 45,
+        "author": "cyndunlop",
+        "comment_count": 4
+      },
+      {
+        "title": "Fairphone 6 and PostmarketOS working main camera",
+        "url": "https://catcrafts.net/posts/fairphone-6-postmarketos-working-main-camera",
+        "points": 132,
+        "author": "pizzaiolo",
+        "comment_count": 29
+      },
+      {
+        "title": "A Preview of DuckDB v2.0",
+        "url": "https://duckdb.org/2026/08/17/duckdb-20-highlights",
+        "points": 589,
+        "author": "ibotty",
+        "comment_count": 107
+      },
+      {
+        "title": "AI-Generated GitHub Copilot “Autofix” Allowed Compromise of Snowflake's Jira",
+        "url": "https://www.wiz.io/blog/red-agent-snowflake-copilot-cicd-bug",
+        "points": 349,
+        "author": "galnagli",
+        "comment_count": 137
+      },
+      {
+        "title": "Wellington second-hand bookstore's mysterious orders",
+        "url": "https://www.rnz.co.nz/life/books/wellington-second-hand-book-store-s-mysterious-orders",
+        "points": 48,
+        "author": "beanaroo",
+        "comment_count": 24
+      },
+      {
+        "title": "GPU Offload in Rust: Portable, Safe, and Fast",
+        "url": "https://arxiv.org/abs/2608.13759",
+        "points": 186,
+        "author": "linggen",
+        "comment_count": 36
+      },
+      {
+        "title": "Olo (Color)",
+        "url": "https://en.wikipedia.org/wiki/Olo_(color)",
+        "points": 384,
+        "author": "inigyou",
+        "comment_count": 74
+      },
+      {
+        "title": "The Road to MS-DOS 2.0",
+        "url": "https://nemanjatrifunovic.substack.com/p/the-road-to-ms-dos-2",
+        "points": 50,
+        "author": "whobre",
+        "comment_count": 16
+      },
+      {
+        "title": "Israel creates fake think tank in likely attempt to dupe AI chatbots",
+        "url": "https://responsiblestatecraft.org/israel-influence-chatgpt/",
+        "points": 308,
+        "author": "DeepLogin",
+        "comment_count": 178
+      },
+      {
+        "title": "GPT 5.6 Sol is the best \"vision\" model OpenAI ever released",
+        "url": "https://blog.roboflow.com/openai-gpt-5-6/",
+        "points": 320,
+        "author": "plurby",
+        "comment_count": 156
+      },
+      {
+        "title": "An update on leaving Gmail for Fastmail",
+        "url": "https://moddedbear.com/an-update-on-leaving-gmail-for-fastmail/",
+        "points": 171,
+        "author": "neogodless",
+        "comment_count": 115
+      },
+      {
+        "title": "AI;DR (AI; Didn't Read)",
+        "url": "https://www.rickmanelius.com/p/aidr-ai-didnt-read",
+        "points": 746,
+        "author": "mooreds",
+        "comment_count": 479
+      },
+      {
+        "title": "Judge sets framework for Nine PBS to retrieve archival data",
+        "url": "https://current.org/2026/08/judge-sets-framework-for-nine-pbs-to-retrieve-archival-data/",
+        "points": 152,
+        "author": "qingcharles",
+        "comment_count": 59
+      },
+      {
+        "title": "Los Puesteros, solitary men who look after ranches and livestock in Patagonia",
+        "url": "https://www.newyorker.com/culture/photo-booth/the-lonely-men-at-the-end-of-the-world",
+        "points": 132,
+        "author": "bookofjoe",
+        "comment_count": 46
+      },
+      {
+        "title": "India has paved the way for charging merchants a fee on UPI transactions",
+        "url": "https://www.bbc.com/news/articles/c8xnwqe00v1o",
+        "points": 125,
+        "author": "monkey_monkey",
+        "comment_count": 151
+      },
+      {
+        "title": "Sun Clock",
+        "url": "https://sunclock.net/",
+        "points": 204,
+        "author": "Gecko4072",
+        "comment_count": 63
+      }
+    ],
+    "input": {
+      "url": "https://news.ycombinator.com"
+    }
+  }
+]
