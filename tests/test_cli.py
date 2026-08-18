@@ -229,5 +229,55 @@ class CLITests(unittest.TestCase):
             )
 
 
+    @patch("src.nexwatch.cli.repair_extraction")
+    def test_recover_dry_run_does_not_execute_external_recovery(
+        self,
+        repair_mock,
+    ):
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "dry-run.json"
+
+            with patch(
+                "sys.argv",
+                [
+                    "nexwatch",
+                    "recover",
+                    "--collector-id",
+                    "c_test",
+                    "--url",
+                    "https://news.ycombinator.com",
+                    "--current",
+                    str(DEGRADED),
+                    "--baseline",
+                    str(BASELINE),
+                    "--output",
+                    str(output_path),
+                    "--dry-run",
+                ],
+            ):
+                result = main()
+
+            self.assertEqual(result, 0)
+            self.assertTrue(output_path.exists())
+
+            report = json.loads(
+                output_path.read_text(encoding="utf-8")
+            )
+
+            self.assertEqual(report["status"], "dry_run")
+            self.assertEqual(
+                report["decision"]["action"],
+                "heal",
+            )
+            self.assertFalse(
+                report["external_action_executed"]
+            )
+            self.assertIsNotNone(
+                report["healing_prompt"]
+            )
+
+            repair_mock.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()
+

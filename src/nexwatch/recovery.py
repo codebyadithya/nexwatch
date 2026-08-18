@@ -195,6 +195,7 @@ def approve_and_verify_repair(
     approve_output_path: Path,
     scraper_url: str,
     *,
+    initial_health: float = 0.0,
     approve_heal_fn: Callable = approve_heal,
     run_scraper_fn: Callable = run_scraper,
 ) -> RecoveryResult:
@@ -219,7 +220,7 @@ def approve_and_verify_repair(
     }:
         return RecoveryResult(
             status="repair_failed",
-            initial_health=0.0,
+            initial_health=initial_health,
             final_health=None,
             healing_attempted=True,
             approval_required=True,
@@ -250,7 +251,7 @@ def approve_and_verify_repair(
 
         return RecoveryResult(
             status="recovered",
-            initial_health=0.0,
+            initial_health=initial_health,
             final_health=final_report.health_score,
             healing_attempted=True,
             approval_required=True,
