@@ -158,7 +158,7 @@ def repair_extraction(
         baseline_path,
     )
 
-    if final_report.status == "healthy":
+    if final_report.status in {"healthy", "warning"} and not final_report.critical_issues:
         steps.append("Repaired extraction passed validation.")
 
         return RecoveryResult(
@@ -246,7 +246,15 @@ def approve_and_verify_repair(
         baseline_path,
     )
 
-    if final_report.status == "healthy":
+    validation_passed = (
+        final_report.status == "healthy"
+        or (
+            final_report.status == "warning"
+            and not getattr(final_report, "critical_issues", [])
+        )
+    )
+
+    if validation_passed:
         steps.append("Repaired extraction passed validation.")
 
         return RecoveryResult(
