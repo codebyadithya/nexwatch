@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 
+from .models import RecoveryEvidence
 from .orchestrator import build_healing_prompt, evaluate_extraction
 from .recovery import approve_and_verify_repair, repair_extraction
 
@@ -47,17 +48,35 @@ def recover_command(args):
             baseline_path=Path(args.baseline),
         )
 
+        healing_prompt = (
+            build_healing_prompt(report)
+            if decision.action == "heal"
+            else None
+        )
+
+        evidence = RecoveryEvidence(
+            collector_id=args.collector_id,
+            target_url=args.url,
+            initial_report=report.to_dict(),
+            decision=decision.to_dict(),
+            healing_attempted=False,
+            approval_required=False,
+            scraper_repaired=False,
+            recovery_verified=False,
+            final_report=None,
+            status="dry_run",
+            reasons=decision.reasons.copy(),
+            steps=plan.steps.copy(),
+        )
+
         result = {
             "status": "dry_run",
             "initial_report": report.to_dict(),
             "decision": decision.to_dict(),
             "plan": plan.to_dict(),
-            "healing_prompt": (
-                build_healing_prompt(report)
-                if decision.action == "heal"
-                else None
-            ),
+            "healing_prompt": healing_prompt,
             "external_action_executed": False,
+            "evidence": evidence.to_dict(),
         }
 
         output = json.dumps(

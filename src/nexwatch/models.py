@@ -48,3 +48,35 @@ class HealthReport:
             "warnings": self.warnings,
             "critical_issues": self.critical_issues,
         }
+
+
+@dataclass
+class RecoveryEvidence:
+    collector_id: str
+    target_url: str
+    initial_report: dict[str, Any]
+    decision: dict[str, Any]
+    healing_attempted: bool
+    approval_required: bool
+    scraper_repaired: bool
+    recovery_verified: bool
+    final_report: dict[str, Any] | None
+    status: str
+    reasons: list[str] = field(default_factory=list)
+    steps: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "collector_id": self.collector_id,
+            "target_url": self.target_url,
+            "initial_report": self.initial_report,
+            "decision": self.decision,
+            "healing_attempted": self.healing_attempted,
+            "approval_required": self.approval_required,
+            "scraper_repaired": self.scraper_repaired,
+            "recovery_verified": self.recovery_verified,
+            "final_report": self.final_report,
+            "status": self.status,
+            "reasons": self.reasons,
+            "steps": self.steps,
+        }
