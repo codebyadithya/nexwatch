@@ -7,6 +7,42 @@ from uuid import uuid4
 
 from .models import RecoveryEvidence
 
+@dataclass
+class RecoverySummary:
+    """
+    Aggregated operational summary for a collector's recovery history.
+    """
+
+    collector_id: str
+    total_runs: int
+    successful_recoveries: int
+    failed_recoveries: int
+    approval_required_runs: int
+    healing_attempts: int
+    verification_failures: int
+    success_rate: float
+    latest_status: str | None
+    latest_state: str | None
+    latest_started_at: str | None
+    latest_completed_at: str | None
+    average_health_improvement: float | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "collector_id": self.collector_id,
+            "total_runs": self.total_runs,
+            "successful_recoveries": self.successful_recoveries,
+            "failed_recoveries": self.failed_recoveries,
+            "approval_required_runs": self.approval_required_runs,
+            "healing_attempts": self.healing_attempts,
+            "verification_failures": self.verification_failures,
+            "success_rate": self.success_rate,
+            "latest_status": self.latest_status,
+            "latest_state": self.latest_state,
+            "latest_started_at": self.latest_started_at,
+            "latest_completed_at": self.latest_completed_at,
+            "average_health_improvement": self.average_health_improvement,
+        }
 
 @dataclass
 class RecoveryRun:
@@ -161,6 +197,104 @@ class RecoveryHistoryStore:
             return None
 
         return runs[-1]
+
+    def summarize(
+        self,
+        collector_id: str,
+    ) -> RecoverySummary:
+        """
+        Return aggregated recovery statistics for a collector.
+        """
+        runs = self._read_runs(collector_id)
+
+        if not runs:
+            return RecoverySummary(
+                collector_id=collector_id,
+                total_runs=0,
+                successful_recoveries=0,
+                failed_recoveries=0,
+                approval_required_runs=0,
+                healing_attempts=0,
+                verification_failures=0,
+                success_rate=0.0,
+                latest_status=None,
+                latest_state=None,
+                latest_started_at=None,
+                latest_completed_at=None,
+                average_health_improvement=None,
+            )
+
+        total_runs = len(runs)
+
+        successful_recoveries = sum(
+            1
+            for run in runs
+            if run.get("status") == "recovered"
+        )
+
+        failed_recoveries = sum(
+            1
+            for run in runs
+            if run.get("status")
+            in {
+                "repair_failed",
+                "verification_failed",
+                "investigation_required",
+            }
+        )
+
+        approval_required_runs = sum(
+            1
+            for run in runs
+            if run.get("approval_required") is True
+        )
+
+        healing_attempts = sum(
+            1
+            for run in runs
+            if run.get("healing_attempted") is True
+        )
+
+        verification_failures = sum(
+            1
+            for run in runs
+            if run.get("status") == "verification_failed"
+        )
+
+        success_rate = (
+            successful_recoveries / total_runs * 100.0
+        )
+
+        health_deltas = [
+            run["final_health"] - run["initial_health"]
+            for run in runs
+            if run.get("initial_health") is not None
+            and run.get("final_health") is not None
+        ]
+
+        average_health_improvement = (
+            sum(health_deltas) / len(health_deltas)
+            if health_deltas
+            else None
+        )
+
+        latest = runs[-1]
+
+        return RecoverySummary(
+            collector_id=collector_id,
+            total_runs=total_runs,
+            successful_recoveries=successful_recoveries,
+            failed_recoveries=failed_recoveries,
+            approval_required_runs=approval_required_runs,
+            healing_attempts=healing_attempts,
+            verification_failures=verification_failures,
+            success_rate=success_rate,
+            latest_status=latest.get("status"),
+            latest_state=latest.get("state"),
+            latest_started_at=latest.get("started_at"),
+            latest_completed_at=latest.get("completed_at"),
+            average_health_improvement=average_health_improvement,
+        )
 
 
 def utc_now() -> str:

@@ -297,6 +297,286 @@ class RecoveryHistoryTests(unittest.TestCase):
                 0,
             )
 
+    def test_summary_for_empty_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = RecoveryHistoryStore(
+                Path(directory)
+            )
+
+            summary = store.summarize(
+                "unknown_collector"
+            )
+
+            self.assertEqual(
+                summary.collector_id,
+                "unknown_collector",
+            )
+
+            self.assertEqual(
+                summary.total_runs,
+                0,
+            )
+
+            self.assertEqual(
+                summary.successful_recoveries,
+                0,
+            )
+
+            self.assertEqual(
+                summary.failed_recoveries,
+                0,
+            )
+
+            self.assertEqual(
+                summary.success_rate,
+                0.0,
+            )
+
+            self.assertIsNone(
+                summary.latest_status
+            )
+
+            self.assertIsNone(
+                summary.average_health_improvement
+            )
+
+    def test_summary_counts_recovery_outcomes(self):
+        evidence = self._make_evidence()
+
+        successful_run = RecoveryRun.from_evidence(
+            evidence,
+            initial_health=60.0,
+            final_health=100.0,
+            started_at="2026-08-20T10:00:00+00:00",
+            completed_at="2026-08-20T10:00:05+00:00",
+            run_id="summary_success",
+        )
+
+        failed_evidence = self._make_evidence(
+            status="verification_failed",
+            state=RecoveryState.FAILED,
+            healing_attempted=True,
+            approval_required=False,
+            scraper_repaired=True,
+            recovery_verified=False,
+        )
+
+        failed_run = RecoveryRun.from_evidence(
+            failed_evidence,
+            initial_health=80.0,
+            final_health=70.0,
+            started_at="2026-08-20T11:00:00+00:00",
+            completed_at="2026-08-20T11:00:05+00:00",
+            run_id="summary_failure",
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = RecoveryHistoryStore(
+                Path(directory)
+            )
+
+            store.append(successful_run)
+            store.append(failed_run)
+
+            summary = store.summarize(
+                "c_test"
+            )
+
+            self.assertEqual(
+                summary.total_runs,
+                2,
+            )
+
+            self.assertEqual(
+                summary.successful_recoveries,
+                1,
+            )
+
+            self.assertEqual(
+                summary.failed_recoveries,
+                1,
+            )
+
+            self.assertEqual(
+                summary.verification_failures,
+                1,
+            )
+
+            self.assertEqual(
+                summary.healing_attempts,
+                2,
+            )
+
+            self.assertEqual(
+                summary.success_rate,
+                50.0,
+            )
+
+    def test_summary_counts_approval_required_runs(self):
+        evidence = self._make_evidence(
+            approval_required=True,
+            scraper_repaired=False,
+            recovery_verified=False,
+            state=RecoveryState.AWAITING_APPROVAL,
+            status="approval_required",
+        )
+
+        run = RecoveryRun.from_evidence(
+            evidence,
+            initial_health=68.0,
+            final_health=None,
+            started_at="2026-08-20T12:00:00+00:00",
+            completed_at="2026-08-20T12:00:01+00:00",
+            run_id="summary_approval",
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = RecoveryHistoryStore(
+                Path(directory)
+            )
+
+            store.append(run)
+
+            summary = store.summarize(
+                "c_test"
+            )
+
+            self.assertEqual(
+                summary.approval_required_runs,
+                1,
+            )
+
+            self.assertEqual(
+                summary.healing_attempts,
+                1,
+            )
+
+    def test_summary_calculates_average_health_improvement(self):
+        evidence = self._make_evidence()
+
+        run_one = RecoveryRun.from_evidence(
+            evidence,
+            initial_health=60.0,
+            final_health=100.0,
+            started_at="2026-08-20T10:00:00+00:00",
+            completed_at="2026-08-20T10:00:05+00:00",
+            run_id="summary_health_001",
+        )
+
+        run_two = RecoveryRun.from_evidence(
+            evidence,
+            initial_health=80.0,
+            final_health=90.0,
+            started_at="2026-08-20T11:00:00+00:00",
+            completed_at="2026-08-20T11:00:05+00:00",
+            run_id="summary_health_002",
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = RecoveryHistoryStore(
+                Path(directory)
+            )
+
+            store.append(run_one)
+            store.append(run_two)
+
+            summary = store.summarize(
+                "c_test"
+            )
+
+            self.assertEqual(
+                summary.average_health_improvement,
+                25.0,
+            )
+
+    def test_summary_exposes_latest_run(self):
+        evidence = self._make_evidence()
+
+        run = RecoveryRun.from_evidence(
+            evidence,
+            initial_health=72.0,
+            final_health=100.0,
+            started_at="2026-08-21T10:00:00+00:00",
+            completed_at="2026-08-21T10:00:04+00:00",
+            run_id="summary_latest",
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = RecoveryHistoryStore(
+                Path(directory)
+            )
+
+            store.append(run)
+
+            summary = store.summarize(
+                "c_test"
+            )
+
+            self.assertEqual(
+                summary.latest_status,
+                "recovered",
+            )
+
+            self.assertEqual(
+                summary.latest_state,
+                "recovered",
+            )
+
+            self.assertEqual(
+                summary.latest_started_at,
+                "2026-08-21T10:00:00+00:00",
+            )
+
+            self.assertEqual(
+                summary.latest_completed_at,
+                "2026-08-21T10:00:04+00:00",
+            )
+
+    def test_summary_serializes_to_dict(self):
+        evidence = self._make_evidence()
+
+        run = RecoveryRun.from_evidence(
+            evidence,
+            initial_health=70.0,
+            final_health=100.0,
+            started_at="2026-08-20T10:00:00+00:00",
+            completed_at="2026-08-20T10:00:05+00:00",
+            run_id="summary_dict",
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = RecoveryHistoryStore(
+                Path(directory)
+            )
+
+            store.append(run)
+
+            summary = store.summarize(
+                "c_test"
+            )
+
+            data = summary.to_dict()
+
+            self.assertEqual(
+                data["collector_id"],
+                "c_test",
+            )
+
+            self.assertEqual(
+                data["total_runs"],
+                1,
+            )
+
+            self.assertEqual(
+                data["successful_recoveries"],
+                1,
+            )
+
+            self.assertEqual(
+                data["success_rate"],
+                100.0,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
