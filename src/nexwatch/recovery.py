@@ -3,9 +3,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .brightdata_client import approve_heal, heal_scraper, run_scraper
+from .history import RecoveryHistoryStore, RecoveryRun, utc_now
 from .models import RecoveryEvidence
 from .orchestrator import build_healing_prompt, evaluate_extraction
-from .state import RecoveryContext, RecoveryState, transition
+from .state import RecoveryContext, RecoveryState
 
 
 @dataclass
@@ -86,6 +87,28 @@ def _build_recovery_evidence(
     )
 
 
+def _persist_recovery_run(
+    *,
+    history_store: RecoveryHistoryStore | None,
+    evidence: RecoveryEvidence,
+    initial_health: float,
+    final_health: float | None,
+    started_at: str,
+) -> None:
+    if history_store is None:
+        return
+
+    run = RecoveryRun.from_evidence(
+        evidence,
+        initial_health=initial_health,
+        final_health=final_health,
+        started_at=started_at,
+        completed_at=utc_now(),
+    )
+
+    history_store.append(run)
+
+
 def repair_extraction(
     collector_id: str,
     current_path: Path,
@@ -103,6 +126,7 @@ def repair_extraction(
     heal_scraper_fn: Callable[..., Any] | None = None,
     approve_heal_fn: Callable[..., Any] | None = None,
     run_scraper_fn: Callable[..., Any] | None = None,
+    history_store: RecoveryHistoryStore | None = None,
 ) -> RecoveryResult:
     """
     Execute the NexWatch recovery workflow.
@@ -143,6 +167,8 @@ def repair_extraction(
 
     if repaired_output_path is None:
         repaired_output_path = healed_output_path
+
+    started_at = utc_now()
 
     context = RecoveryContext()
     context.record_event(
@@ -200,6 +226,14 @@ def repair_extraction(
             steps=steps,
         )
 
+        _persist_recovery_run(
+            history_store=history_store,
+            evidence=evidence,
+            initial_health=report.health_score,
+            final_health=report.health_score,
+            started_at=started_at,
+        )
+
         return RecoveryResult(
             status="healthy",
             initial_health=report.health_score,
@@ -243,6 +277,14 @@ def repair_extraction(
             status="investigation_required",
             reasons=decision.reasons,
             steps=steps,
+        )
+
+        _persist_recovery_run(
+            history_store=history_store,
+            evidence=evidence,
+            initial_health=report.health_score,
+            final_health=None,
+            started_at=started_at,
         )
 
         return RecoveryResult(
@@ -309,6 +351,14 @@ def repair_extraction(
             steps=steps,
         )
 
+        _persist_recovery_run(
+            history_store=history_store,
+            evidence=evidence,
+            initial_health=report.health_score,
+            final_health=None,
+            started_at=started_at,
+        )
+
         return RecoveryResult(
             status="awaiting_approval",
             initial_health=report.health_score,
@@ -357,6 +407,14 @@ def repair_extraction(
             status="repair_failed",
             reasons=decision.reasons,
             steps=steps,
+        )
+
+        _persist_recovery_run(
+            history_store=history_store,
+            evidence=evidence,
+            initial_health=report.health_score,
+            final_health=None,
+            started_at=started_at,
         )
 
         return RecoveryResult(
@@ -433,6 +491,14 @@ def repair_extraction(
             steps=steps,
         )
 
+        _persist_recovery_run(
+            history_store=history_store,
+            evidence=evidence,
+            initial_health=report.health_score,
+            final_health=final_report.health_score,
+            started_at=started_at,
+        )
+
         return RecoveryResult(
             status="recovered",
             initial_health=report.health_score,
@@ -475,6 +541,14 @@ def repair_extraction(
         status="verification_failed",
         reasons=decision.reasons,
         steps=steps,
+    )
+
+    _persist_recovery_run(
+        history_store=history_store,
+        evidence=evidence,
+        initial_health=report.health_score,
+        final_health=final_report.health_score,
+        started_at=started_at,
     )
 
     return RecoveryResult(

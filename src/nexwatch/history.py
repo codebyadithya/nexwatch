@@ -70,6 +70,7 @@ class RecoveryRun:
     reasons: list[str] = field(default_factory=list)
     steps: list[str] = field(default_factory=list)
     state_history: list[str] = field(default_factory=list)
+    events: list[dict[str, Any]] = field(default_factory=list)
     evidence: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -90,6 +91,7 @@ class RecoveryRun:
             "reasons": self.reasons,
             "steps": self.steps,
             "state_history": self.state_history,
+            "events": self.events,
             "evidence": self.evidence,
         }
 
@@ -121,6 +123,7 @@ class RecoveryRun:
             reasons=evidence.reasons.copy(),
             steps=evidence.steps.copy(),
             state_history=evidence.state_history.copy(),
+            events=evidence.events.copy(),
             evidence=evidence.to_dict(),
         )
 

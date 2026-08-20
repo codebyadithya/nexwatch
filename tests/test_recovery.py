@@ -8,6 +8,7 @@ from src.nexwatch.recovery import (
     approve_and_verify_repair,
     repair_extraction,
 )
+from src.nexwatch.history import RecoveryHistoryStore
 from src.nexwatch.models import HealthReport
 from src.nexwatch.state import RecoveryState
 
@@ -38,6 +39,99 @@ class RecoveryTests(unittest.TestCase):
         self.assertFalse(result.healing_attempted)
         self.assertTrue(result.recovery_verified)
         heal_mock.assert_not_called()
+
+    def test_recovery_run_is_persisted_to_history(self):
+        heal_mock = Mock()
+
+        with tempfile.TemporaryDirectory() as directory:
+            history_store = RecoveryHistoryStore(
+                Path(directory) / "history"
+            )
+            result = repair_extraction(
+                collector_id="c_test",
+                current_path=HEALTHY,
+                baseline_path=BASELINE,
+                healed_output_path=Path(directory) / "healed.json",
+                heal_output_path=Path(directory) / "heal.json",
+                approve_output_path=Path(directory) / "approve.json",
+                scraper_url="https://news.ycombinator.com",
+                heal_scraper_fn=heal_mock,
+                history_store=history_store,
+            )
+            runs = history_store.list_runs("c_test")
+
+        self.assertEqual(result.status, "healthy")
+        self.assertEqual(len(runs), 1)
+        run = runs[0]
+        self.assertEqual(run["collector_id"], "c_test")
+        self.assertEqual(
+            run["target_url"],
+            "https://news.ycombinator.com",
+        )
+        self.assertEqual(run["status"], "healthy")
+        self.assertEqual(run["initial_health"], result.initial_health)
+        self.assertEqual(run["final_health"], result.final_health)
+        self.assertEqual(
+            run["state"],
+            "recovered",
+        )
+        self.assertTrue(run["events"])
+        self.assertEqual(
+            run["events"][0]["event"],
+            "recovery_started",
+        )
+        self.assertEqual(
+            run["events"][-1]["event"],
+            "recovery_not_required",
+        )
+        self.assertTrue(run["started_at"])
+        self.assertTrue(run["completed_at"])
+        self.assertTrue(run["run_id"])
+
+    def test_failed_repair_is_persisted_to_history(self):
+        heal_mock = Mock(
+            return_value={"status": "failed"}
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            history_store = RecoveryHistoryStore(
+                Path(directory) / "history"
+            )
+            result = repair_extraction(
+                collector_id="c_test",
+                current_path=DEGRADED,
+                baseline_path=BASELINE,
+                healed_output_path=Path(directory) / "healed.json",
+                heal_output_path=Path(directory) / "heal.json",
+                approve_output_path=Path(directory) / "approve.json",
+                scraper_url="https://news.ycombinator.com",
+                heal_scraper_fn=heal_mock,
+                history_store=history_store,
+            )
+            runs = history_store.list_runs("c_test")
+
+        self.assertEqual(result.status, "repair_failed")
+        self.assertEqual(len(runs), 1)
+        run = runs[0]
+        self.assertEqual(
+            run["status"],
+            "repair_failed",
+        )
+        self.assertEqual(
+            run["state"],
+            "failed",
+        )
+        self.assertEqual(
+            run["events"][-1]["event"],
+            "healing_failed",
+        )
+        self.assertEqual(
+            run["events"][-1]["state"],
+            "failed",
+        )
+        self.assertIsNone(
+            run["final_health"]
+        )
 
     def test_healthy_recovery_records_terminal_state_history(self):
         heal_mock = Mock()
