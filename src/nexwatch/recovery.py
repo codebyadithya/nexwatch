@@ -273,7 +273,7 @@ def approve_and_verify_repair(
 
     return RecoveryResult(
         status="verification_failed",
-        initial_health=0.0,
+        initial_health=initial_health,
         final_health=final_report.health_score,
         healing_attempted=True,
         approval_required=True,
