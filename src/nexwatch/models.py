@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from .state import RecoveryState
+
 
 @dataclass
 class FieldHealth:
@@ -54,6 +56,7 @@ class HealthReport:
 class RecoveryEvidence:
     collector_id: str
     target_url: str
+    state: RecoveryState
     initial_report: dict[str, Any]
     decision: dict[str, Any]
     healing_attempted: bool
@@ -69,6 +72,7 @@ class RecoveryEvidence:
         return {
             "collector_id": self.collector_id,
             "target_url": self.target_url,
+            "state": self.state.value,
             "initial_report": self.initial_report,
             "decision": self.decision,
             "healing_attempted": self.healing_attempted,

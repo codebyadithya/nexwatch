@@ -5,6 +5,7 @@ from typing import Any, Callable
 from .brightdata_client import approve_heal, heal_scraper, run_scraper
 from .models import RecoveryEvidence
 from .orchestrator import build_healing_prompt, evaluate_extraction
+from .state import RecoveryState, transition
 
 
 @dataclass
@@ -40,10 +41,10 @@ class RecoveryResult:
 
 
 def _status_from_heal_result(result: Any) -> str:
-    if not isinstance(result, dict):
-        return ""
+    if isinstance(result, dict):
+        return str(result.get("status", "")).lower()
 
-    return str(result.get("status", "")).lower()
+    return str(getattr(result, "status", "")).lower()
 
 
 def _build_recovery_evidence(
@@ -52,6 +53,7 @@ def _build_recovery_evidence(
     initial_report: Any,
     decision: Any,
     *,
+    state: RecoveryState,
     healing_attempted: bool,
     approval_required: bool,
     scraper_repaired: bool,
@@ -64,6 +66,7 @@ def _build_recovery_evidence(
     return RecoveryEvidence(
         collector_id=collector_id,
         target_url=scraper_url,
+        state=state,
         initial_report=initial_report.to_dict(),
         decision=decision.to_dict(),
         healing_attempted=healing_attempted,
@@ -85,33 +88,88 @@ def repair_extraction(
     collector_id: str,
     current_path: Path,
     baseline_path: Path,
-    healed_output_path: Path,
-    heal_output_path: Path,
-    approve_output_path: Path,
     scraper_url: str,
     *,
-    run_scraper_fn: Callable = run_scraper,
-    heal_scraper_fn: Callable = heal_scraper,
-    approve_heal_fn: Callable = approve_heal,
+    healed_output_path: Path | None = None,
+    heal_output_path: Path | None = None,
+    approve_output_path: Path | None = None,
+    approval_output_path: Path | None = None,
+    repaired_output_path: Path | None = None,
+    healing_fn: Callable[..., Any] = heal_scraper,
+    approval_fn: Callable[..., Any] = approve_heal,
+    run_fn: Callable[..., Any] = run_scraper,
+    heal_scraper_fn: Callable[..., Any] | None = None,
+    approve_heal_fn: Callable[..., Any] | None = None,
+    run_scraper_fn: Callable[..., Any] | None = None,
 ) -> RecoveryResult:
+    """
+    Execute the NexWatch recovery workflow.
 
-    report, decision, _ = evaluate_extraction(
+    Compatibility note:
+    The public API historically used:
+        healed_output_path
+        approve_output_path
+
+    The implementation also accepts:
+        repaired_output_path
+        approval_output_path
+
+    This keeps existing callers and tests working while allowing the
+    architecture to evolve.
+    """
+
+    if heal_scraper_fn is not None:
+        healing_fn = heal_scraper_fn
+
+    if approve_heal_fn is not None:
+        approval_fn = approve_heal_fn
+
+    if run_scraper_fn is not None:
+        run_fn = run_scraper_fn
+
+    if heal_output_path is None:
+        heal_output_path = healed_output_path
+
+    if healed_output_path is None:
+        healed_output_path = heal_output_path
+
+    if approve_output_path is None:
+        approve_output_path = approval_output_path
+
+    if approval_output_path is None:
+        approval_output_path = approve_output_path
+
+    if repaired_output_path is None:
+        repaired_output_path = healed_output_path
+
+    report, decision, plan = evaluate_extraction(
         current_path,
         baseline_path,
     )
 
-    steps = [
-        "Evaluate current extraction health.",
-    ]
+    steps = plan.steps.copy()
+
+    current_state = RecoveryState.DETECTED
+
+    current_state = transition(
+        current_state,
+        RecoveryState.ASSESSED,
+    )
 
     if decision.action == "none":
         steps.append("No healing required.")
+
+        current_state = transition(
+            current_state,
+            RecoveryState.RECOVERED,
+        )
 
         evidence = _build_recovery_evidence(
             collector_id=collector_id,
             scraper_url=scraper_url,
             initial_report=report,
             decision=decision,
+            state=current_state,
             healing_attempted=False,
             approval_required=False,
             scraper_repaired=False,
@@ -140,11 +198,17 @@ def repair_extraction(
             "Investigation required; automatic scraper repair was not triggered."
         )
 
+        current_state = transition(
+            current_state,
+            RecoveryState.FAILED,
+        )
+
         evidence = _build_recovery_evidence(
             collector_id=collector_id,
             scraper_url=scraper_url,
             initial_report=report,
             decision=decision,
+            state=current_state,
             healing_attempted=False,
             approval_required=False,
             scraper_repaired=False,
@@ -170,13 +234,14 @@ def repair_extraction(
 
     prompt = build_healing_prompt(report)
 
-    steps.append("Generate a targeted Bright Data healing prompt.")
-    steps.append("Request a Bright Data scraper repair.")
+    current_state = transition(
+        current_state,
+        RecoveryState.HEALING,
+    )
 
-    heal_result = heal_scraper_fn(
+    heal_result = healing_fn(
         collector_id=collector_id,
         prompt=prompt,
-        url=scraper_url,
         output_path=heal_output_path,
     )
 
@@ -184,16 +249,24 @@ def repair_extraction(
 
     if healing_status in {
         "awaiting_approval",
-        "pending_approval",
         "approval_required",
+        "pending_approval",
     }:
-        steps.append("Bright Data repair is awaiting approval.")
+        steps.append(
+            "Bright Data repair is awaiting approval."
+        )
+
+        current_state = transition(
+            current_state,
+            RecoveryState.AWAITING_APPROVAL,
+        )
 
         evidence = _build_recovery_evidence(
             collector_id=collector_id,
             scraper_url=scraper_url,
             initial_report=report,
             decision=decision,
+            state=current_state,
             healing_attempted=True,
             approval_required=True,
             scraper_repaired=False,
@@ -227,11 +300,17 @@ def repair_extraction(
             "Bright Data healing did not complete successfully."
         )
 
+        current_state = transition(
+            current_state,
+            RecoveryState.FAILED,
+        )
+
         evidence = _build_recovery_evidence(
             collector_id=collector_id,
             scraper_url=scraper_url,
             initial_report=report,
             decision=decision,
+            state=current_state,
             healing_attempted=True,
             approval_required=False,
             scraper_repaired=False,
@@ -256,15 +335,17 @@ def repair_extraction(
         )
 
     steps.append("Bright Data repair completed.")
-    steps.append("Re-run the repaired scraper.")
 
-    run_scraper_fn(
-        collector_id=collector_id,
-        url=scraper_url,
-        output_path=healed_output_path,
+    current_state = transition(
+        current_state,
+        RecoveryState.VERIFYING,
     )
 
-    steps.append("Validate the repaired extraction against the baseline.")
+    healed_output_path = run_fn(
+        collector_id=collector_id,
+        scraper_url=scraper_url,
+        output_path=repaired_output_path,
+    )
 
     final_report, _, _ = evaluate_extraction(
         healed_output_path,
@@ -280,13 +361,21 @@ def repair_extraction(
     )
 
     if validation_passed:
-        steps.append("Repaired extraction passed validation.")
+        steps.append(
+            "Repaired extraction passed validation."
+        )
+
+        current_state = transition(
+            current_state,
+            RecoveryState.RECOVERED,
+        )
 
         evidence = _build_recovery_evidence(
             collector_id=collector_id,
             scraper_url=scraper_url,
             initial_report=report,
             decision=decision,
+            state=current_state,
             healing_attempted=True,
             approval_required=False,
             scraper_repaired=True,
@@ -314,11 +403,17 @@ def repair_extraction(
         "Repaired extraction failed post-repair validation."
     )
 
+    current_state = transition(
+        current_state,
+        RecoveryState.FAILED,
+    )
+
     evidence = _build_recovery_evidence(
         collector_id=collector_id,
         scraper_url=scraper_url,
         initial_report=report,
         decision=decision,
+        state=current_state,
         healing_attempted=True,
         approval_required=False,
         scraper_repaired=True,
@@ -345,27 +440,55 @@ def repair_extraction(
 
 def approve_and_verify_repair(
     collector_id: str,
-    baseline_path: Path,
-    healed_output_path: Path,
-    approve_output_path: Path,
     scraper_url: str,
-    *,
     initial_health: float = 0.0,
-    approve_heal_fn: Callable = approve_heal,
-    run_scraper_fn: Callable = run_scraper,
+    baseline_path: Path | None = None,
+    healed_output_path: Path | None = None,
+    *,
+    approval_output_path: Path | None = None,
+    approve_output_path: Path | None = None,
+    approval_fn: Callable[..., Any] | None = None,
+    approve_heal_fn: Callable[..., Any] | None = None,
+    run_fn: Callable[..., Any] | None = None,
+    run_scraper_fn: Callable[..., Any] | None = None,
 ) -> RecoveryResult:
 
+    if baseline_path is None:
+        raise ValueError("baseline_path is required")
+
+    if healed_output_path is None:
+        raise ValueError("healed_output_path is required")
+
+    # Backward-compatible parameter aliases.
+    if approval_fn is None:
+        approval_fn = (
+            approve_heal_fn
+            if approve_heal_fn is not None
+            else approve_heal
+        )
+
+    if run_fn is None:
+        run_fn = (
+            run_scraper_fn
+            if run_scraper_fn is not None
+            else run_scraper
+        )
+
+    if approval_output_path is None:
+        approval_output_path = approve_output_path
+
     steps = [
-        "Approve the pending Bright Data scraper repair.",
+        "Approve the pending Bright Data repair.",
     ]
 
-    approve_result = approve_heal_fn(
+    approval_result = approval_fn(
         collector_id=collector_id,
-        url=scraper_url,
-        output_path=approve_output_path,
+        output_path=approval_output_path,
     )
 
-    approval_status = _status_from_heal_result(approve_result)
+    approval_status = _status_from_heal_result(
+        approval_result
+    )
 
     if approval_status not in {
         "done",
@@ -373,11 +496,14 @@ def approve_and_verify_repair(
         "success",
         "succeeded",
     }:
-        steps.append("Bright Data repair approval failed.")
+        steps.append(
+            "Bright Data repair approval failed."
+        )
 
         evidence = RecoveryEvidence(
             collector_id=collector_id,
             target_url=scraper_url,
+            state=RecoveryState.FAILED,
             initial_report={},
             decision={},
             healing_attempted=True,
@@ -404,18 +530,33 @@ def approve_and_verify_repair(
         )
 
     steps.append("Repair approved successfully.")
-    steps.append("Re-run the repaired scraper.")
 
-    run_scraper_fn(
+    # The approved repair must now produce the repaired extraction
+    # before it can be validated against the baseline.
+    steps.append(
+        "Run the repaired scraper before validating recovery."
+    )
+
+    repaired_result = run_fn(
         collector_id=collector_id,
-        url=scraper_url,
+        scraper_url=scraper_url,
         output_path=healed_output_path,
     )
 
-    steps.append("Validate the repaired extraction against the baseline.")
+    # Some implementations return the output path directly while
+    # others write to the path supplied above.
+    actual_output_path = (
+        repaired_result
+        if isinstance(repaired_result, (str, Path))
+        else healed_output_path
+    )
+
+    steps.append(
+        "Validate the repaired extraction against the baseline."
+    )
 
     final_report, final_decision, _ = evaluate_extraction(
-        healed_output_path,
+        Path(actual_output_path),
         baseline_path,
     )
 
@@ -423,26 +564,33 @@ def approve_and_verify_repair(
         final_report.status == "healthy"
         or (
             final_report.status == "warning"
-            and not getattr(final_report, "critical_issues", [])
+            and not getattr(
+                final_report,
+                "critical_issues",
+                [],
+            )
         )
     )
 
     if validation_passed:
-        steps.append("Repaired extraction passed validation.")
+        steps.append(
+            "Repaired extraction passed validation."
+        )
 
-        evidence = _build_recovery_evidence(
+        evidence = RecoveryEvidence(
             collector_id=collector_id,
-            scraper_url=scraper_url,
-            initial_report=final_report,
-            decision=final_decision,
+            target_url=scraper_url,
+            state=RecoveryState.RECOVERED,
+            initial_report=final_report.to_dict(),
+            decision=final_decision.to_dict(),
             healing_attempted=True,
             approval_required=True,
             scraper_repaired=True,
             recovery_verified=True,
-            final_report=final_report,
+            final_report=final_report.to_dict(),
             status="recovered",
             reasons=[],
-            steps=steps,
+            steps=steps.copy(),
         )
 
         return RecoveryResult(
@@ -462,19 +610,20 @@ def approve_and_verify_repair(
         "Repaired extraction failed post-repair validation."
     )
 
-    evidence = _build_recovery_evidence(
+    evidence = RecoveryEvidence(
         collector_id=collector_id,
-        scraper_url=scraper_url,
-        initial_report=final_report,
-        decision=final_decision,
+        target_url=scraper_url,
+        state=RecoveryState.FAILED,
+        initial_report=final_report.to_dict(),
+        decision=final_decision.to_dict(),
         healing_attempted=True,
         approval_required=True,
         scraper_repaired=True,
         recovery_verified=False,
-        final_report=final_report,
+        final_report=final_report.to_dict(),
         status="verification_failed",
         reasons=["post_repair_validation_failed"],
-        steps=steps,
+        steps=steps.copy(),
     )
 
     return RecoveryResult(

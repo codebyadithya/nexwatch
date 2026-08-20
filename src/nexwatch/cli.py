@@ -5,6 +5,7 @@ from pathlib import Path
 from .models import RecoveryEvidence
 from .orchestrator import build_healing_prompt, evaluate_extraction
 from .recovery import approve_and_verify_repair, repair_extraction
+from .state import RecoveryState, transition
 
 
 def _write_json(data, path):
@@ -54,9 +55,16 @@ def recover_command(args):
             else None
         )
 
+        state = RecoveryState.DETECTED
+        state = transition(
+            state,
+            RecoveryState.ASSESSED,
+        )
+
         evidence = RecoveryEvidence(
             collector_id=args.collector_id,
             target_url=args.url,
+            state=state,
             initial_report=report.to_dict(),
             decision=decision.to_dict(),
             healing_attempted=False,
