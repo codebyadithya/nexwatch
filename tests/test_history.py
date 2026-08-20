@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from src.nexwatch.history import (
-    RecoveryEvent,
+    RecoveryRun,
     RecoveryHistoryStore,
 )
 from src.nexwatch.models import RecoveryEvidence
@@ -60,7 +60,7 @@ class RecoveryHistoryTests(unittest.TestCase):
     def test_event_can_be_created_from_evidence(self):
         evidence = self._make_evidence()
 
-        event = RecoveryEvent.from_evidence(
+        event = RecoveryRun.from_evidence(
             evidence,
             initial_health=68.92,
             final_health=100.0,
@@ -101,7 +101,7 @@ class RecoveryHistoryTests(unittest.TestCase):
     def test_event_serializes_to_dict(self):
         evidence = self._make_evidence()
 
-        event = RecoveryEvent.from_evidence(
+        event = RecoveryRun.from_evidence(
             evidence,
             initial_health=68.92,
             final_health=100.0,
@@ -140,7 +140,7 @@ class RecoveryHistoryTests(unittest.TestCase):
     def test_store_appends_event(self):
         evidence = self._make_evidence()
 
-        event = RecoveryEvent.from_evidence(
+        event = RecoveryRun.from_evidence(
             evidence,
             initial_health=68.92,
             final_health=100.0,
@@ -156,24 +156,24 @@ class RecoveryHistoryTests(unittest.TestCase):
 
             store.append(event)
 
-            events = store.list_events(
+            runs = store.list_runs(
                 "c_test"
             )
 
             self.assertEqual(
-                len(events),
+                len(runs),
                 1,
             )
 
             self.assertEqual(
-                events[0]["run_id"],
+                runs[0]["run_id"],
                 "run_test_003",
             )
 
-    def test_store_preserves_multiple_events(self):
+    def test_store_preserves_multiple_runs(self):
         evidence = self._make_evidence()
 
-        event_one = RecoveryEvent.from_evidence(
+        event_one = RecoveryRun.from_evidence(
             evidence,
             initial_health=68.92,
             final_health=100.0,
@@ -182,7 +182,7 @@ class RecoveryHistoryTests(unittest.TestCase):
             run_id="run_test_004",
         )
 
-        event_two = RecoveryEvent.from_evidence(
+        event_two = RecoveryRun.from_evidence(
             evidence,
             initial_health=72.0,
             final_health=100.0,
@@ -199,29 +199,29 @@ class RecoveryHistoryTests(unittest.TestCase):
             store.append(event_one)
             store.append(event_two)
 
-            events = store.list_events(
+            runs = store.list_runs(
                 "c_test"
             )
 
             self.assertEqual(
-                len(events),
+                len(runs),
                 2,
             )
 
             self.assertEqual(
-                events[0]["run_id"],
+                runs[0]["run_id"],
                 "run_test_004",
             )
 
             self.assertEqual(
-                events[1]["run_id"],
+                runs[1]["run_id"],
                 "run_test_005",
             )
 
-    def test_latest_returns_most_recent_event(self):
+    def test_latest_returns_most_recent_run(self):
         evidence = self._make_evidence()
 
-        event_one = RecoveryEvent.from_evidence(
+        event_one = RecoveryRun.from_evidence(
             evidence,
             initial_health=68.92,
             final_health=100.0,
@@ -230,7 +230,7 @@ class RecoveryHistoryTests(unittest.TestCase):
             run_id="run_test_006",
         )
 
-        event_two = RecoveryEvent.from_evidence(
+        event_two = RecoveryRun.from_evidence(
             evidence,
             initial_health=72.0,
             final_health=100.0,
@@ -271,7 +271,7 @@ class RecoveryHistoryTests(unittest.TestCase):
     def test_collectors_have_separate_history(self):
         evidence = self._make_evidence()
 
-        event = RecoveryEvent.from_evidence(
+        event = RecoveryRun.from_evidence(
             evidence,
             initial_health=68.92,
             final_health=100.0,
@@ -288,12 +288,12 @@ class RecoveryHistoryTests(unittest.TestCase):
             store.append(event)
 
             self.assertEqual(
-                len(store.list_events("c_test")),
+                len(store.list_runs("c_test")),
                 1,
             )
 
             self.assertEqual(
-                len(store.list_events("another_collector")),
+                len(store.list_runs("another_collector")),
                 0,
             )
 

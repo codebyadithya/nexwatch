@@ -5,7 +5,7 @@ from typing import Any, Callable
 from .brightdata_client import approve_heal, heal_scraper, run_scraper
 from .models import RecoveryEvidence
 from .orchestrator import build_healing_prompt, evaluate_extraction
-from .state import RecoveryContext, RecoveryState
+from .state import RecoveryContext, RecoveryState, transition
 
 
 @dataclass
@@ -53,8 +53,7 @@ def _build_recovery_evidence(
     initial_report: Any,
     decision: Any,
     *,
-    state: RecoveryState,
-    state_history: list[str],
+    context: RecoveryContext,
     healing_attempted: bool,
     approval_required: bool,
     scraper_repaired: bool,
@@ -67,7 +66,7 @@ def _build_recovery_evidence(
     return RecoveryEvidence(
         collector_id=collector_id,
         target_url=scraper_url,
-        state=state,
+        state=context.state,
         initial_report=initial_report.to_dict(),
         decision=decision.to_dict(),
         healing_attempted=healing_attempted,
@@ -82,7 +81,8 @@ def _build_recovery_evidence(
         status=status,
         reasons=reasons.copy(),
         steps=steps.copy(),
-        state_history=state_history.copy(),
+        state_history=context.history_values(),
+        events=context.events_to_dict(),
     )
 
 
@@ -144,6 +144,16 @@ def repair_extraction(
     if repaired_output_path is None:
         repaired_output_path = healed_output_path
 
+    context = RecoveryContext()
+    context.record_event(
+        "recovery_started",
+        "Recovery workflow started.",
+        metadata={
+            "collector_id": collector_id,
+            "target_url": scraper_url,
+        },
+    )
+
     report, decision, plan = evaluate_extraction(
         current_path,
         baseline_path,
@@ -151,10 +161,16 @@ def repair_extraction(
 
     steps = plan.steps.copy()
 
-    context = RecoveryContext()
-
     context.advance(
         RecoveryState.ASSESSED,
+    )
+    context.record_event(
+        "assessment_completed",
+        "Extraction health assessment completed.",
+        metadata={
+            "action": decision.action,
+            "health_score": report.health_score,
+        },
     )
 
     if decision.action == "none":
@@ -163,14 +179,17 @@ def repair_extraction(
         context.advance(
             RecoveryState.RECOVERED,
         )
+        context.record_event(
+            "recovery_not_required",
+            "Extraction was healthy; no healing was required.",
+        )
 
         evidence = _build_recovery_evidence(
             collector_id=collector_id,
             scraper_url=scraper_url,
             initial_report=report,
             decision=decision,
-            state=context.state,
-            state_history=context.history_values(),
+            context=context,
             healing_attempted=False,
             approval_required=False,
             scraper_repaired=False,
@@ -202,14 +221,20 @@ def repair_extraction(
         context.advance(
             RecoveryState.FAILED,
         )
+        context.record_event(
+            "investigation_required",
+            "Automatic recovery was not triggered; investigation is required.",
+            metadata={
+                "reasons": decision.reasons,
+            },
+        )
 
         evidence = _build_recovery_evidence(
             collector_id=collector_id,
             scraper_url=scraper_url,
             initial_report=report,
             decision=decision,
-            state=context.state,
-            state_history=context.history_values(),
+            context=context,
             healing_attempted=False,
             approval_required=False,
             scraper_repaired=False,
@@ -238,6 +263,10 @@ def repair_extraction(
     context.advance(
         RecoveryState.HEALING,
     )
+    context.record_event(
+        "healing_started",
+        "Bright Data scraper healing was requested.",
+    )
 
     heal_result = healing_fn(
         collector_id=collector_id,
@@ -259,14 +288,17 @@ def repair_extraction(
         context.advance(
             RecoveryState.AWAITING_APPROVAL,
         )
+        context.record_event(
+            "healing_awaiting_approval",
+            "Bright Data healing is awaiting approval.",
+        )
 
         evidence = _build_recovery_evidence(
             collector_id=collector_id,
             scraper_url=scraper_url,
             initial_report=report,
             decision=decision,
-            state=context.state,
-            state_history=context.history_values(),
+            context=context,
             healing_attempted=True,
             approval_required=True,
             scraper_repaired=False,
@@ -303,14 +335,20 @@ def repair_extraction(
         context.advance(
             RecoveryState.FAILED,
         )
+        context.record_event(
+            "healing_failed",
+            "Bright Data scraper healing did not complete successfully.",
+            metadata={
+                "healing_status": healing_status,
+            },
+        )
 
         evidence = _build_recovery_evidence(
             collector_id=collector_id,
             scraper_url=scraper_url,
             initial_report=report,
             decision=decision,
-            state=context.state,
-            state_history=context.history_values(),
+            context=context,
             healing_attempted=True,
             approval_required=False,
             scraper_repaired=False,
@@ -338,6 +376,10 @@ def repair_extraction(
 
     context.advance(
         RecoveryState.VERIFYING,
+    )
+    context.record_event(
+        "verification_started",
+        "Repaired extraction verification started.",
     )
 
     healed_output_path = run_fn(
@@ -367,14 +409,20 @@ def repair_extraction(
         context.advance(
             RecoveryState.RECOVERED,
         )
+        context.record_event(
+            "verification_passed",
+            "Repaired extraction passed post-repair validation.",
+            metadata={
+                "final_health": final_report.health_score,
+            },
+        )
 
         evidence = _build_recovery_evidence(
             collector_id=collector_id,
             scraper_url=scraper_url,
             initial_report=report,
             decision=decision,
-            state=context.state,
-            state_history=context.history_values(),
+            context=context,
             healing_attempted=True,
             approval_required=False,
             scraper_repaired=True,
@@ -405,14 +453,20 @@ def repair_extraction(
     context.advance(
         RecoveryState.FAILED,
     )
+    context.record_event(
+        "verification_failed",
+        "Repaired extraction failed post-repair validation.",
+        metadata={
+            "final_health": final_report.health_score,
+        },
+    )
 
     evidence = _build_recovery_evidence(
         collector_id=collector_id,
         scraper_url=scraper_url,
         initial_report=report,
         decision=decision,
-        state=context.state,
-        state_history=context.history_values(),
+        context=context,
         healing_attempted=True,
         approval_required=False,
         scraper_repaired=True,
@@ -480,6 +534,24 @@ def approve_and_verify_repair(
         "Approve the pending Bright Data repair.",
     ]
 
+    context = RecoveryContext(
+        state=RecoveryState.AWAITING_APPROVAL,
+        history=[
+            RecoveryState.DETECTED,
+            RecoveryState.ASSESSED,
+            RecoveryState.HEALING,
+            RecoveryState.AWAITING_APPROVAL,
+        ],
+    )
+    context.record_event(
+        "approval_started",
+        "Approval workflow started.",
+        metadata={
+            "collector_id": collector_id,
+            "target_url": scraper_url,
+        },
+    )
+
     approval_result = approval_fn(
         collector_id=collector_id,
         output_path=approval_output_path,
@@ -499,10 +571,16 @@ def approve_and_verify_repair(
             "Bright Data repair approval failed."
         )
 
+        context.advance(RecoveryState.FAILED)
+        context.record_event(
+            "approval_failed",
+            "Pending Bright Data repair approval failed.",
+        )
+
         evidence = RecoveryEvidence(
             collector_id=collector_id,
             target_url=scraper_url,
-            state=RecoveryState.FAILED,
+            state=context.state,
             initial_report={},
             decision={},
             healing_attempted=True,
@@ -513,6 +591,8 @@ def approve_and_verify_repair(
             status="repair_failed",
             reasons=["approval_failed"],
             steps=steps.copy(),
+            state_history=context.history_values(),
+            events=context.events_to_dict(),
         )
 
         return RecoveryResult(
@@ -529,6 +609,16 @@ def approve_and_verify_repair(
         )
 
     steps.append("Repair approved successfully.")
+    context.record_event(
+        "approval_received",
+        "Pending Bright Data repair was approved.",
+    )
+
+    context.advance(RecoveryState.VERIFYING)
+    context.record_event(
+        "verification_started",
+        "Approved repaired extraction verification started.",
+    )
 
     # The approved repair must now produce the repaired extraction
     # before it can be validated against the baseline.
@@ -576,10 +666,16 @@ def approve_and_verify_repair(
             "Repaired extraction passed validation."
         )
 
+        context.advance(RecoveryState.RECOVERED)
+        context.record_event(
+            "verification_passed",
+            "Approved repaired extraction passed validation.",
+        )
+
         evidence = RecoveryEvidence(
             collector_id=collector_id,
             target_url=scraper_url,
-            state=RecoveryState.RECOVERED,
+            state=context.state,
             initial_report=final_report.to_dict(),
             decision=final_decision.to_dict(),
             healing_attempted=True,
@@ -590,6 +686,8 @@ def approve_and_verify_repair(
             status="recovered",
             reasons=[],
             steps=steps.copy(),
+            state_history=context.history_values(),
+            events=context.events_to_dict(),
         )
 
         return RecoveryResult(
@@ -609,10 +707,16 @@ def approve_and_verify_repair(
         "Repaired extraction failed post-repair validation."
     )
 
+    context.advance(RecoveryState.FAILED)
+    context.record_event(
+        "verification_failed",
+        "Approved repaired extraction failed validation.",
+    )
+
     evidence = RecoveryEvidence(
         collector_id=collector_id,
         target_url=scraper_url,
-        state=RecoveryState.FAILED,
+        state=context.state,
         initial_report=final_report.to_dict(),
         decision=final_decision.to_dict(),
         healing_attempted=True,
@@ -623,6 +727,8 @@ def approve_and_verify_repair(
         status="verification_failed",
         reasons=["post_repair_validation_failed"],
         steps=steps.copy(),
+        state_history=context.history_values(),
+        events=context.events_to_dict(),
     )
 
     return RecoveryResult(

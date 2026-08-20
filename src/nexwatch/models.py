@@ -68,6 +68,7 @@ class RecoveryEvidence:
     reasons: list[str] = field(default_factory=list)
     steps: list[str] = field(default_factory=list)
     state_history: list[str] = field(default_factory=list)
+    events: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -85,4 +86,5 @@ class RecoveryEvidence:
             "reasons": self.reasons,
             "steps": self.steps,
             "state_history": self.state_history,
+            "events": self.events,
         }

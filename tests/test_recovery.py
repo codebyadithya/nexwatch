@@ -188,6 +188,13 @@ class RecoveryTests(unittest.TestCase):
         self.assertTrue(result.approval_required)
         self.assertFalse(result.recovery_verified)
 
+        self.assertIsNotNone(result.evidence)
+        event_names = [
+            event["event"]
+            for event in result.evidence.events
+        ]
+        self.assertIn("healing_awaiting_approval", event_names)
+
         heal_mock.assert_called_once()
 
         prompt = heal_mock.call_args.kwargs["prompt"]
@@ -254,6 +261,24 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(result.initial_health, 68.92)
         self.assertEqual(result.final_health, 100.0)
 
+        self.assertIsNotNone(result.evidence)
+        events = result.evidence.events
+        self.assertTrue(events)
+        self.assertEqual(events[0]["event"], "recovery_started")
+        event_names = [event["event"] for event in events]
+        self.assertIn("assessment_completed", event_names)
+        self.assertIn("healing_started", event_names)
+        self.assertIn("verification_started", event_names)
+        self.assertIn("verification_passed", event_names)
+        self.assertLess(
+            event_names.index("healing_started"),
+            event_names.index("verification_started"),
+        )
+        self.assertLess(
+            event_names.index("verification_started"),
+            event_names.index("verification_passed"),
+        )
+
         heal_mock.assert_called_once()
         run_mock.assert_called_once()
 
@@ -314,6 +339,10 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(result.status, "verification_failed")
         self.assertTrue(result.scraper_repaired)
         self.assertFalse(result.recovery_verified)
+        self.assertIsNotNone(result.evidence)
+        events = result.evidence.events
+        self.assertEqual(events[-1]["event"], "verification_failed")
+        self.assertEqual(events[-1]["state"], "failed")
 
     @patch("src.nexwatch.recovery.evaluate_extraction")
     def test_approval_then_successful_verification(self, evaluate_mock):

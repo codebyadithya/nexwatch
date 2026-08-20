@@ -81,6 +81,72 @@ class RecoveryStateTests(unittest.TestCase):
             ],
         )
 
+    def test_recovery_event_serializes(self):
+        context = RecoveryContext()
+
+        event = context.record_event(
+            "recovery_started",
+            "Recovery workflow started.",
+            metadata={"collector_id": "c_test"},
+        )
+
+        payload = event.to_dict()
+
+        self.assertEqual(payload["event"], "recovery_started")
+        self.assertEqual(payload["state"], "detected")
+        self.assertEqual(
+            payload["message"],
+            "Recovery workflow started.",
+        )
+        self.assertEqual(
+            payload["metadata"]["collector_id"],
+            "c_test",
+        )
+        self.assertTrue(payload["timestamp"])
+
+    def test_recovery_context_records_events_in_order(self):
+        context = RecoveryContext()
+
+        context.record_event(
+            "recovery_started",
+            "Recovery workflow started.",
+        )
+        context.advance(RecoveryState.ASSESSED)
+        context.record_event(
+            "assessment_completed",
+            "Assessment completed.",
+        )
+
+        self.assertEqual(
+            [event.event for event in context.events],
+            [
+                "recovery_started",
+                "assessment_completed",
+            ],
+        )
+
+    def test_recovery_events_capture_state_at_event_time(self):
+        context = RecoveryContext()
+
+        context.record_event(
+            "recovery_started",
+            "Recovery workflow started.",
+        )
+        context.advance(RecoveryState.ASSESSED)
+        context.record_event(
+            "assessment_completed",
+            "Assessment completed.",
+        )
+
+        self.assertEqual(
+            context.events[0].state,
+            RecoveryState.DETECTED,
+        )
+        self.assertEqual(
+            context.events[1].state,
+            RecoveryState.ASSESSED,
+        )
+
     def test_context_rejects_invalid_transition(self):
         context = RecoveryContext()
 
