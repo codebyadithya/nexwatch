@@ -9,6 +9,7 @@ from src.nexwatch.recovery import (
     repair_extraction,
 )
 from src.nexwatch.models import HealthReport
+from src.nexwatch.state import RecoveryState
 
 
 BASELINE = Path("data/baselines/hn-baseline-2026-08-17.json")
@@ -37,6 +38,100 @@ class RecoveryTests(unittest.TestCase):
         self.assertFalse(result.healing_attempted)
         self.assertTrue(result.recovery_verified)
         heal_mock.assert_not_called()
+
+    def test_healthy_recovery_records_terminal_state_history(self):
+        heal_mock = Mock()
+
+        with tempfile.TemporaryDirectory() as directory:
+            result = repair_extraction(
+                collector_id="c_test",
+                current_path=HEALTHY,
+                baseline_path=BASELINE,
+                healed_output_path=Path(directory) / "healed.json",
+                heal_output_path=Path(directory) / "heal.json",
+                approve_output_path=Path(directory) / "approve.json",
+                scraper_url="https://news.ycombinator.com",
+                heal_scraper_fn=heal_mock,
+            )
+
+        self.assertEqual(
+            result.evidence.state_history,
+            [
+                "detected",
+                "assessed",
+                "recovered",
+            ],
+        )
+        heal_mock.assert_not_called()
+
+    def test_failed_repair_records_failed_state_history(self):
+        heal_mock = Mock(
+            return_value={"status": "failed"}
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            result = repair_extraction(
+                collector_id="c_test",
+                current_path=DEGRADED,
+                baseline_path=BASELINE,
+                healed_output_path=Path(directory) / "healed.json",
+                heal_output_path=Path(directory) / "heal.json",
+                approve_output_path=Path(directory) / "approve.json",
+                scraper_url="https://news.ycombinator.com",
+                heal_scraper_fn=heal_mock,
+            )
+
+        self.assertEqual(result.status, "repair_failed")
+        self.assertIsNotNone(result.evidence)
+        self.assertEqual(
+            result.evidence.state,
+            RecoveryState.FAILED,
+        )
+        self.assertEqual(
+            result.evidence.state_history,
+            [
+                "detected",
+                "assessed",
+                "healing",
+                "failed",
+            ],
+        )
+
+    def test_awaiting_approval_records_state_history(self):
+        heal_mock = Mock(
+            return_value={"status": "awaiting_approval"}
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            result = repair_extraction(
+                collector_id="c_test",
+                current_path=DEGRADED,
+                baseline_path=BASELINE,
+                healed_output_path=Path(directory) / "healed.json",
+                heal_output_path=Path(directory) / "heal.json",
+                approve_output_path=Path(directory) / "approve.json",
+                scraper_url="https://news.ycombinator.com",
+                heal_scraper_fn=heal_mock,
+            )
+
+        self.assertEqual(
+            result.status,
+            "awaiting_approval",
+        )
+        self.assertIsNotNone(result.evidence)
+        self.assertEqual(
+            result.evidence.state,
+            RecoveryState.AWAITING_APPROVAL,
+        )
+        self.assertEqual(
+            result.evidence.state_history,
+            [
+                "detected",
+                "assessed",
+                "healing",
+                "awaiting_approval",
+            ],
+        )
 
     def test_warning_path_does_not_trigger_automatic_repair(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -5,7 +5,7 @@ from typing import Any, Callable
 from .brightdata_client import approve_heal, heal_scraper, run_scraper
 from .models import RecoveryEvidence
 from .orchestrator import build_healing_prompt, evaluate_extraction
-from .state import RecoveryState, transition
+from .state import RecoveryContext, RecoveryState
 
 
 @dataclass
@@ -54,6 +54,7 @@ def _build_recovery_evidence(
     decision: Any,
     *,
     state: RecoveryState,
+    state_history: list[str],
     healing_attempted: bool,
     approval_required: bool,
     scraper_repaired: bool,
@@ -81,6 +82,7 @@ def _build_recovery_evidence(
         status=status,
         reasons=reasons.copy(),
         steps=steps.copy(),
+        state_history=state_history.copy(),
     )
 
 
@@ -149,18 +151,16 @@ def repair_extraction(
 
     steps = plan.steps.copy()
 
-    current_state = RecoveryState.DETECTED
+    context = RecoveryContext()
 
-    current_state = transition(
-        current_state,
+    context.advance(
         RecoveryState.ASSESSED,
     )
 
     if decision.action == "none":
         steps.append("No healing required.")
 
-        current_state = transition(
-            current_state,
+        context.advance(
             RecoveryState.RECOVERED,
         )
 
@@ -169,7 +169,8 @@ def repair_extraction(
             scraper_url=scraper_url,
             initial_report=report,
             decision=decision,
-            state=current_state,
+            state=context.state,
+            state_history=context.history_values(),
             healing_attempted=False,
             approval_required=False,
             scraper_repaired=False,
@@ -198,8 +199,7 @@ def repair_extraction(
             "Investigation required; automatic scraper repair was not triggered."
         )
 
-        current_state = transition(
-            current_state,
+        context.advance(
             RecoveryState.FAILED,
         )
 
@@ -208,7 +208,8 @@ def repair_extraction(
             scraper_url=scraper_url,
             initial_report=report,
             decision=decision,
-            state=current_state,
+            state=context.state,
+            state_history=context.history_values(),
             healing_attempted=False,
             approval_required=False,
             scraper_repaired=False,
@@ -234,8 +235,7 @@ def repair_extraction(
 
     prompt = build_healing_prompt(report)
 
-    current_state = transition(
-        current_state,
+    context.advance(
         RecoveryState.HEALING,
     )
 
@@ -256,8 +256,7 @@ def repair_extraction(
             "Bright Data repair is awaiting approval."
         )
 
-        current_state = transition(
-            current_state,
+        context.advance(
             RecoveryState.AWAITING_APPROVAL,
         )
 
@@ -266,7 +265,8 @@ def repair_extraction(
             scraper_url=scraper_url,
             initial_report=report,
             decision=decision,
-            state=current_state,
+            state=context.state,
+            state_history=context.history_values(),
             healing_attempted=True,
             approval_required=True,
             scraper_repaired=False,
@@ -300,8 +300,7 @@ def repair_extraction(
             "Bright Data healing did not complete successfully."
         )
 
-        current_state = transition(
-            current_state,
+        context.advance(
             RecoveryState.FAILED,
         )
 
@@ -310,7 +309,8 @@ def repair_extraction(
             scraper_url=scraper_url,
             initial_report=report,
             decision=decision,
-            state=current_state,
+            state=context.state,
+            state_history=context.history_values(),
             healing_attempted=True,
             approval_required=False,
             scraper_repaired=False,
@@ -336,8 +336,7 @@ def repair_extraction(
 
     steps.append("Bright Data repair completed.")
 
-    current_state = transition(
-        current_state,
+    context.advance(
         RecoveryState.VERIFYING,
     )
 
@@ -365,8 +364,7 @@ def repair_extraction(
             "Repaired extraction passed validation."
         )
 
-        current_state = transition(
-            current_state,
+        context.advance(
             RecoveryState.RECOVERED,
         )
 
@@ -375,7 +373,8 @@ def repair_extraction(
             scraper_url=scraper_url,
             initial_report=report,
             decision=decision,
-            state=current_state,
+            state=context.state,
+            state_history=context.history_values(),
             healing_attempted=True,
             approval_required=False,
             scraper_repaired=True,
@@ -403,8 +402,7 @@ def repair_extraction(
         "Repaired extraction failed post-repair validation."
     )
 
-    current_state = transition(
-        current_state,
+    context.advance(
         RecoveryState.FAILED,
     )
 
@@ -413,7 +411,8 @@ def repair_extraction(
         scraper_url=scraper_url,
         initial_report=report,
         decision=decision,
-        state=current_state,
+        state=context.state,
+        state_history=context.history_values(),
         healing_attempted=True,
         approval_required=False,
         scraper_repaired=True,
