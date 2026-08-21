@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 
+from .history import RecoveryHistoryStore
 from .models import RecoveryEvidence
 from .orchestrator import build_healing_prompt, evaluate_extraction
 from .recovery import approve_and_verify_repair, repair_extraction
@@ -189,6 +190,37 @@ def approve_command(args):
     return 0 if result.status == "recovered" else 1
 
 
+def history_command(args):
+    store = RecoveryHistoryStore(Path(args.history_root))
+
+    if args.summary:
+        summary = store.summarize(args.collector_id)
+        result = summary.to_dict()
+    elif args.latest:
+        latest = store.latest(args.collector_id)
+        result = latest if latest is not None else {
+            "collector_id": args.collector_id,
+            "message": "No recovery history found.",
+        }
+    else:
+        runs = store.list_runs(args.collector_id)
+        result = {
+            "collector_id": args.collector_id,
+            "total_runs": len(runs),
+            "runs": runs,
+        }
+
+    print(
+        json.dumps(
+            result,
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
+
+    return 0
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         description="NexWatch extraction monitoring and recovery system"
@@ -332,6 +364,39 @@ def build_parser():
     )
 
     approve_parser.set_defaults(func=approve_command)
+
+    history_parser = subparsers.add_parser(
+        "history",
+        help="Inspect persisted recovery history.",
+    )
+
+    history_parser.add_argument(
+        "--collector-id",
+        required=True,
+        help="Collector ID whose recovery history should be inspected.",
+    )
+
+    history_parser.add_argument(
+        "--history-root",
+        default="data/runs/history",
+        help="Root directory containing persisted recovery history.",
+    )
+
+    history_mode = history_parser.add_mutually_exclusive_group()
+
+    history_mode.add_argument(
+        "--summary",
+        action="store_true",
+        help="Show aggregated recovery statistics.",
+    )
+
+    history_mode.add_argument(
+        "--latest",
+        action="store_true",
+        help="Show only the latest recovery run.",
+    )
+
+    history_parser.set_defaults(func=history_command)
 
     return parser
 

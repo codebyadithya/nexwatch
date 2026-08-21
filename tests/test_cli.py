@@ -278,6 +278,39 @@ class CLITests(unittest.TestCase):
 
             repair_mock.assert_not_called()
 
+    def test_history_command_supports_summary_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch(
+                "sys.argv",
+                [
+                    "nexwatch",
+                    "history",
+                    "--collector-id",
+                    "c_test",
+                    "--history-root",
+                    directory,
+                    "--summary",
+                ],
+            ):
+                result = main()
+
+            self.assertEqual(result, 0)
+
+    def test_history_command_rejects_summary_and_latest_together(self):
+        with patch(
+            "sys.argv",
+            [
+                "nexwatch",
+                "history",
+                "--collector-id",
+                "c_test",
+                "--summary",
+                "--latest",
+            ],
+        ):
+            with self.assertRaises(SystemExit):
+                main()
+
 if __name__ == "__main__":
     unittest.main()
 
