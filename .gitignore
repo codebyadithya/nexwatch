@@ -24,3 +24,7 @@ Thumbs.db
 .idea/
 
 data/runs/
+
+# Dashboard dependencies and build output
+dashboard/node_modules/
+dashboard/dist/

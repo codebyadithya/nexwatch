@@ -313,6 +313,7 @@ def repair_extraction(
     heal_result = healing_fn(
         collector_id=collector_id,
         prompt=prompt,
+        url=scraper_url,
         output_path=heal_output_path,
     )
 
@@ -442,7 +443,7 @@ def repair_extraction(
 
     healed_output_path = run_fn(
         collector_id=collector_id,
-        scraper_url=scraper_url,
+        url=scraper_url,
         output_path=repaired_output_path,
     )
 
@@ -628,6 +629,7 @@ def approve_and_verify_repair(
 
     approval_result = approval_fn(
         collector_id=collector_id,
+        url=scraper_url,
         output_path=approval_output_path,
     )
 
@@ -702,7 +704,7 @@ def approve_and_verify_repair(
 
     repaired_result = run_fn(
         collector_id=collector_id,
-        scraper_url=scraper_url,
+        url=scraper_url,
         output_path=healed_output_path,
     )
 

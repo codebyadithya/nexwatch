@@ -67,6 +67,24 @@ Git `2.50.1.windows.1`
 
 ## Bright Data Configuration
 
+### Dashboard API
+
+The React dashboard reads persisted run evidence with `GET /api/snapshot`.
+Use the dashboard's `SYNC LIVE` action to call `POST /api/collect`. That
+endpoint invokes the existing Bright Data CLI client, validates the returned
+records against the baseline, and returns the fresh validated snapshot.
+
+Configure the custom collector before starting the API:
+
+```powershell
+$env:NEXWATCH_COLLECTOR_ID = "your-custom-collector-id"
+$env:NEXWATCH_TARGET_URL = "https://news.ycombinator.com/"
+python -m uvicorn api:app --reload --port 8000
+```
+
+The collector ID is configuration, not a secret. Never commit API keys or
+`.env` files containing credentials.
+
 ### Account
 
 Bright Data account configured successfully.
